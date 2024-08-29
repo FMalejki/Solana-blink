@@ -1,8 +1,9 @@
 {
   "name": "solana-blink",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "app.js",
   "scripts": {
+    "start": "node app",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -10,6 +11,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@solana/actions": "^1.6.4",
+    "@solana/web3.js": "^1.95.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2"
-  }
+  },
+  "type": "module"
 }
