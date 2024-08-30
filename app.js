@@ -51,7 +51,7 @@ function getActionsJson(req, res) {
               href: `${baseHref}&amount={amount}`,
               parameters: [
                 {
-                  name: "amout",
+                  name: "amount",
                   label: "Enter the amount of TIGAS to buy",
                   required: true,
                 },
@@ -64,7 +64,6 @@ function getActionsJson(req, res) {
       res.json(payload);
     } catch (err) {
       console.error(err);
-      // handleError(res, err);
       res.status(500).json({ message: err?.message || err });
     }
   }
@@ -72,6 +71,7 @@ function getActionsJson(req, res) {
   async function postTransferSol(req, res) {
     try {
       const { amount, toPubkey } = validatedQueryParams(req.query);
+      //const toPubkey = "EhAe53YAbJMXCA2PVHVmhMrtihBnZof2UVoKDt1bUJdD"
       const { account } = req.body;
   
       if (!account) {
@@ -97,30 +97,18 @@ function getActionsJson(req, res) {
       const { blockhash, lastValidBlockHeight } =
         await connection.getLatestBlockhash();
   
-      // create a legacy transaction
+      // create a transaction
       const transaction = new Transaction({
         feePayer: fromPubkey,
         blockhash,
         lastValidBlockHeight,
       }).add(transferSolInstruction);
   
-      // versioned transactions are also supported
-      // const transaction = new VersionedTransaction(
-      //   new TransactionMessage({
-      //     payerKey: fromPubkey,
-      //     recentBlockhash: blockhash,
-      //     instructions: [transferSolInstruction],
-      //   }).compileToV0Message(),
-      //   // note: you can also use `compileToLegacyMessage`
-      // );
-  
       const payload = await createPostResponse({
         fields: {
           transaction,
           message: `Send ${amount} SOL to ${toPubkey.toBase58()}`,
         },
-        // note: no additional signers are needed
-        // signers: [],
       });
   
       res.json(payload);
@@ -130,7 +118,7 @@ function getActionsJson(req, res) {
   }
   
   function validatedQueryParams(query) {
-    let toPubkey = DEFAULT_SOL_ADDRESS;
+    let toPubkey = new PublicKey("EhAe53YAbJMXCA2PVHVmhMrtihBnZof2UVoKDt1bUJdD");
     let amount = DEFAULT_SOL_AMOUNT;
   
     if (query.to) {
@@ -157,5 +145,3 @@ function getActionsJson(req, res) {
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });
-  
-
