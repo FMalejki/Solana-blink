@@ -1,6 +1,11 @@
 import { Connection,Keypair,PublicKey,SystemProgram,Transaction,clusterApiUrl,LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { createPostResponse, actionCorsMiddleware } from "@solana/actions";
+import { getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
+import { getExplorerLink,getKeypairFromEnvironment } from "@solana-developers/helpers";
 import express from "express";
+import "dotenv/config";
+import { TokenBurnFailedError } from "@metaplex-foundation/mpl-token-metadata";
+import { isConstructorDeclaration } from "typescript";
 
 
 //setting up express environment 
@@ -11,7 +16,7 @@ const PORT = 8080;
 const BASE_URL = `http://localhost:${PORT}`;
 
 //setting up solana connection
-const DEFAULT_SOL_ADDRESS = Keypair.generate().publicKey;
+const DEFAULT_SOL_ADDRESS = new PublicKey("EhAe53YAbJMXCA2PVHVmhMrtihBnZof2UVoKDt1bUJdD");
 const DEFAULT_SOL_AMOUNT = 1;
 const connection = new Connection(clusterApiUrl("devnet"));
 
@@ -40,7 +45,7 @@ function getActionsJson(req, res) {
         type: "action",
         title: "Do you want to buy some TIGAS?",
         icon: "https://crimson-legislative-pigeon-962.mypinata.cloud/ipfs/QmdHLynShvCjVitoPxxG7ob8YxbbVuSAgQ3bAscj4XnfHb",
-        description: "Create Account for your wallet for your TIGA (or TIGAS) and buy one doggy for yourself!",
+        description: "Create Account for your wallet for your TIGA (or TIGAS) and buy one doggy for yourself! 1 TIGA IS EQUAL TO 1 SOL!",
         links: {
           actions: [
             { label: "Buy 1 TIGA", href: `${baseHref}&amount=1` },
@@ -69,16 +74,19 @@ function getActionsJson(req, res) {
   }
   
   async function postTransferSol(req, res) {
+    const { amount, toPubkey } = validatedQueryParams(req.query);
+    const { account } = req.body;
+    const fromPubkey = new PublicKey(account);
+
     try {
-      const { amount, toPubkey } = validatedQueryParams(req.query);
-      //const toPubkey = "EhAe53YAbJMXCA2PVHVmhMrtihBnZof2UVoKDt1bUJdD"
-      const { account } = req.body;
+      //const { amount, toPubkey } = validatedQueryParams(req.query);
+      //const { account } = req.body;
   
       if (!account) {
         throw new Error('Invalid "account" provided');
       }
   
-      const fromPubkey = new PublicKey(account);
+      //const fromPubkey = new PublicKey(account);
       const minimumBalance = await connection.getMinimumBalanceForRentExemption(
         0,
       );
@@ -86,16 +94,28 @@ function getActionsJson(req, res) {
       if (amount * LAMPORTS_PER_SOL < minimumBalance) {
         throw new Error(`Account may not be rent exempt: ${toPubkey.toBase58()}`);
       }
-  
+
+
+      if (amount < 0.01){
+        throw new Error("Number cannot be smaller than 0.01!");
+      }
+
+      //amount = amountRework(amount);
+      if( Math.floor(amount * 100) / 100 !== amount){
+        throw new Error("Bad data format");
+      }
+    
       // create an instruction to transfer native SOL from one wallet to another
       const transferSolInstruction = SystemProgram.transfer({
         fromPubkey: fromPubkey,
         toPubkey: toPubkey,
         lamports: amount * LAMPORTS_PER_SOL,
       });
+
   
       const { blockhash, lastValidBlockHeight } =
         await connection.getLatestBlockhash();
+
   
       // create a transaction
       const transaction = new Transaction({
@@ -103,14 +123,16 @@ function getActionsJson(req, res) {
         blockhash,
         lastValidBlockHeight,
       }).add(transferSolInstruction);
-  
+
       const payload = await createPostResponse({
         fields: {
           transaction,
-          message: `Send ${amount} SOL to ${toPubkey.toBase58()}`,
+          message: `${amount} SOL was send to ${toPubkey.toBase58()} in exchange for ${amount} of TIGAS!`,
         },
       });
-  
+
+      mintTigaTokens(amount,fromPubkey)
+
       res.json(payload);
     } catch (err) {
       res.status(400).json({ error: err.message || "An unknown error occurred" });
@@ -118,7 +140,7 @@ function getActionsJson(req, res) {
   }
   
   function validatedQueryParams(query) {
-    let toPubkey = new PublicKey("EhAe53YAbJMXCA2PVHVmhMrtihBnZof2UVoKDt1bUJdD");
+    let toPubkey = DEFAULT_SOL_ADDRESS;
     let amount = DEFAULT_SOL_AMOUNT;
   
     if (query.to) {
@@ -140,7 +162,43 @@ function getActionsJson(req, res) {
   
     return { amount, toPubkey };
   }
-  
+
+  async function mintTigaTokens(amount,fromPubkey){
+    try{
+    //for TIGAS (the smallest unit is 0.01 TIGA)
+    const user = getKeypairFromEnvironment("SECRET_KEY");
+    const MINOR_UNITS_PER_MAJOR_UNITS = Math.pow(10,2);
+    const tokenMintAccount = new PublicKey(
+        "3NFm3ZyqBPtyuUpoKuoTWb43Ms9g8JvwN5QtMoA5kFuA"
+    );
+    
+    const recipentAssociatedTokenAccount = await getOrCreateAssociatedTokenAccount(
+        connection,
+        user,
+        tokenMintAccount,
+        fromPubkey
+    )
+    
+    const transactionSignature = await mintTo(
+        connection,
+        user,
+        tokenMintAccount,
+        recipentAssociatedTokenAccount.address,
+        user,
+        amount*100
+    );
+
+    const link = getExplorerLink("transaction", transactionSignature, "devnet");
+
+    console.log(`Token został wymintowany na konto link: ${link}`);
+
+    }
+    catch(err){
+        console.log(err);
+        throw new Error("Minting process failed!");
+    }
+}
+
   // Start server
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
